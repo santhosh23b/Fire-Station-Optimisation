@@ -1,27 +1,27 @@
 from docplex.mp.model import Model
-import pandas as pd
 
 # Given data
 M = 100000000000
-p = {1:1273,2: 4295,3: 2977,4: 1855,5: 1815,6: 1508,7: 2074,8: 4354,9: 802,10: 2751}
-b = {1:M,2: 3997,3: M,4: 3158,5: M,6: 3983,7: M,8: 3525,9: M,10: 2261}
+p = {1: 1273, 2: 4295, 3: 2977, 4: 1855, 5: 1815, 6: 1508, 7: 2074, 8: 4354, 9: 802, 10: 2751}
+b = {1: M, 2: 3997, 3: M, 4: 3158, 5: M, 6: 3983, 7: M, 8: 3525, 9: M, 10: 2261}
 beta = 13000
 N = list(range(1, 11))
 v = [(i, j) for i in N for j in N]
 r = {(1, 1): 0.0, (1, 2): 10.23, (1, 3): 13.18, (1, 4): 4.28, (1, 5): 8.35, (1, 6): 8.97, (1, 7): 7.47, (1, 8): 10.05, (1, 9): 8.13, (1, 10): 10.2, (2, 1): 10.23, (2, 2): 0.0, (2, 3): 9.74, (2, 4): 6.07, (2, 5): 4.03, (2, 6): 14.47, (2, 7): 10.42, (2, 8): 4.54, (2, 9): 2.32, (2, 10): 0.75, (3, 1): 13.18, (3, 2): 9.74, (3, 3): 0.0, (3, 4): 11.46, (3, 5): 6.61, (3, 6): 10.2, (3, 7): 6.96, (3, 8): 5.27, (3, 9): 10.58, (3, 10): 10.47, (4, 1): 4.28, (4, 2): 6.07, (4, 3): 11.46, (4, 4): 0.0, (4, 5): 5.28, (4, 6): 11.07, (4, 7): 7.98, (4, 8): 7.07, (4, 9): 3.87, (4, 10): 5.96, (5, 1): 8.35, (5, 2): 4.03, (5, 3): 6.61, (5, 4): 5.28, (5, 5): 0.0, (5, 6): 10.6, (5, 7): 6.48, (5, 8): 1.8, (5, 9): 4.07, (5, 10): 4.61, (6, 1): 8.97, (6, 2): 14.47, (6, 3): 10.2, (6, 4): 11.07, (6, 5): 10.6, (6, 6): 0.0, (6, 7): 4.17, (6, 8): 11.19, (6, 9): 13.48, (6, 10): 14.9, (7, 1): 7.47, (7, 2): 10.42, (7, 3): 6.96, (7, 4): 7.98, (7, 5): 6.48, (7, 6): 4.17, (7, 7): 0.0, (7, 8): 7.03, (7, 9): 9.67, (7, 10): 10.9, (8, 1): 10.05, (8, 2): 4.54, (8, 3): 5.27, (8, 4): 7.07, (8, 5): 1.8, (8, 6): 11.19, (8, 7): 7.03, (8, 8): 0.0, (8, 9): 5.36, (8, 10): 5.25, (9, 1): 8.13, (9, 2): 2.32, (9, 3): 10.58, (9, 4): 3.87, (9, 5): 4.07, (9, 6): 13.48, (9, 7): 9.67, (9, 8): 5.36, (9, 9): 0.0, (9, 10): 2.09, (10, 1): 10.2, (10, 2): 0.75, (10, 3): 10.47, (10, 4): 5.96, (10, 5): 4.61, (10, 6): 14.9, (10, 7): 10.9, (10, 8): 5.25, (10, 9): 2.09, (10, 10): 0.0}
-# Create a model
 
+# Create a model
 mdl = Model("Firestationassignment")
+
 # Decision variables
 x = mdl.binary_var_dict(N, name='x')  # Fire station locations
-y = mdl.binary_var_dict(v, name='y')  # Demand assignment
+y = mdl.binary_var_matrix(N, N, name='y')  # Demand assignment
 
 # Objective function
-objective = mdl.sum(p[i]*y[i, j] * max(0,r[i,j]) for i,j in v)
+objective = mdl.sum(p[i] * y[i, j] * max(0, r[i, j] - 5) for i in N for j in N)
 mdl.minimize(objective)
 
 # Budget constraint
-mdl.add_constraint(mdl.sum(b[i] * x[i] for i in N) <= beta)
+mdl.add_constraint(mdl.sum(b[j] * x[j] for j in N) <= beta)
 
 # Demand assignment constraint
 for i in N:
@@ -29,14 +29,13 @@ for i in N:
 
 # Additional constraint: If location i has a fire station, then demand at i must be served by the i fire station
 for i in N:
-    mdl.add_constraint(y[i, i]==x[i])
+    for j in N:
+        mdl.add_constraint(y[i, j] <= x[j])
 
 # Solve the problem
 solution = mdl.solve()
-# Print the status of the solution
-print("Solution status:", mdl.get_solve_status())
 
-# Print the optimal locations for fire stations and the demand nodes they serve
+# Print the status of the
 print("Optimal locations for fire stations and the demand nodes they serve:")
 for j in N:
     if solution.get_value(x[j]) > 0.5:  # If the location is selected as a fire station
@@ -49,6 +48,17 @@ cost=0
 for i in N:
     cost=cost+b[i]*int(x[i])
 print("total cost =",cost)
+time=0
+# Calculate the total violation time
+total_violation_time = 0
+for i in N:
+    for j in N:
+        if solution.get_value(y[i, j]) > 0.5:  # If demand node i is assigned to fire station j
+            excess_time = max(0, llr[i, j] - 5)
+            total_violation_time += excess_time
+print("Total time violation is:", total_violation_time)
+
     # Print the total population-weighted time violations
 total_violations = solution.get_objective_value()
 print("Total population-weighted time violations:", total_violations)
+
